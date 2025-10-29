@@ -1,0 +1,62 @@
+;
+; GetBaseAddress.inf
+;
+
+[Version]
+Signature   = "$WINDOWS NT$"
+Class       = System ; TODO: specify appropriate Class
+ClassGuid   = {4d36e97d-e325-11ce-bfc1-08002be10318} ; TODO: specify appropriate ClassGuid
+Provider    = %ManufacturerName%
+CatalogFile = GetBaseAddress.cat
+DriverVer   = ; TODO: set DriverVer in stampinf property pages
+PnpLockdown = 1
+
+[DestinationDirs]
+DefaultDestDir = 13
+
+[SourceDisksNames]
+1 = %DiskName%,,,""
+
+[SourceDisksFiles]
+GetBaseAddress.sys = 1,,
+
+;*****************************************
+; Install Section
+;*****************************************
+
+[Manufacturer]
+%ManufacturerName% = Standard,NT$ARCH$.10.0...16299 ; %13% support introduced in build 16299
+
+[Standard.NT$ARCH$.10.0...16299]
+%GetBaseAddress.DeviceDesc% = GetBaseAddress_Device, Root\GetBaseAddress ; TODO: edit hw-id
+
+[GetBaseAddress_Device.NT]
+CopyFiles = File_Copy
+
+[File_Copy]
+GetBaseAddress.sys
+
+;-------------- Service installation
+[GetBaseAddress_Device.NT.Services]
+AddService = GetBaseAddress,%SPSVCINST_ASSOCSERVICE%, GetBaseAddress_Service_Inst
+
+; -------------- GetBaseAddress driver install sections
+[GetBaseAddress_Service_Inst]
+DisplayName    = %GetBaseAddress.SVCDESC%
+ServiceType    = 1               ; SERVICE_KERNEL_DRIVER
+StartType      = 3               ; SERVICE_DEMAND_START
+ErrorControl   = 1               ; SERVICE_ERROR_NORMAL
+ServiceBinary  = %13%\GetBaseAddress.sys
+
+[GetBaseAddress_Device.NT.Wdf]
+KmdfService = GetBaseAddress, GetBaseAddress_wdfsect
+
+[GetBaseAddress_wdfsect]
+KmdfLibraryVersion = $KMDFVERSION$
+
+[Strings]
+SPSVCINST_ASSOCSERVICE = 0x00000002
+ManufacturerName = "<Your manufacturer name>" ;TODO: Replace with your manufacturer name
+DiskName = "GetBaseAddress Installation Disk"
+GetBaseAddress.DeviceDesc = "GetBaseAddress Device"
+GetBaseAddress.SVCDESC = "GetBaseAddress Service"
