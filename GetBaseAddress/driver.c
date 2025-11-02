@@ -1,36 +1,73 @@
 #include "driver.h"
-
-
-HANDLE TEST_PID = (HANDLE)2604;
+#include "communication.h"
 
 
 NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath)
 {
     UNREFERENCED_PARAMETER(RegistryPath);
-    DriverObject->DriverUnload = DriverExit;
+
+    UNICODE_STRING DeviceName = RTL_CONSTANT_STRING(L"\\Device\\GetBaseDriver");
+    UNICODE_STRING SymbolicLink = RTL_CONSTANT_STRING(L"\\??\\GetBaseDriverLink");
+
+    PDEVICE_OBJECT deviceObject = NULL;
+    NTSTATUS status = IoCreateDevice(
+        DriverObject,
+        0,
+        &DeviceName,
+        FILE_DEVICE_UNKNOWN,
+        FILE_DEVICE_SECURE_OPEN,
+        FALSE,
+        &deviceObject);
+
+    if (!NT_SUCCESS(status)) {
+        DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "IoCreateDevice failed: 0x%X\n", status);
+        return status;
+    }
+
+    status = IoCreateSymbolicLink(&SymbolicLink, &DeviceName);
+    if (!NT_SUCCESS(status)) {
+        DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "IoCreateSymbolicLink failed: 0x%X\n", status);
+        IoDeleteDevice(deviceObject);
+        return status;
+    }
 
     PsGetProcessPeb = (PsGetProcessPeb_T)GetRuntimeFuncAddress(L"PsGetProcessPeb");
-    if (!PsGetProcessPeb) return STATUS_UNSUCCESSFUL;
+    if (!PsGetProcessPeb) {
+        DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL,
+            "MmGetSystemRoutineAddress(\"PsGetProcessPeb\") failed\n");
+        IoDeleteSymbolicLink(&SymbolicLink);
+        IoDeleteDevice(deviceObject);
+        return STATUS_PROCEDURE_NOT_FOUND;
+    }
 
-    NTSTATUS status;
-    PEPROCESS eproc = NULL;
-    status = PsLookupProcessByProcessId(TEST_PID, &eproc);
-    if (!NT_SUCCESS(status)) return status;
 
-    uintptr_t UnityPlayerBase = GetModuleBase(eproc, L"UnityPlayer.dll");
+    DriverObject->DriverUnload = DriverExit;
+    DriverObject->MajorFunction[IRP_MJ_CREATE] = IrpCreateDispatch;
+    DriverObject->MajorFunction[IRP_MJ_CLOSE] = IrpCloseDispatch;
+    DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL] = IrpCustomDispatcher;
 
-    ObDereferenceObject(eproc);        
-    UNREFERENCED_PARAMETER(UnityPlayerBase);
+    deviceObject->Flags &= ~DO_DEVICE_INITIALIZING;
+    deviceObject->Flags |= DO_BUFFERED_IO;
 
+    DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_INFO_LEVEL, "Driver loaded successfully\n");
     return STATUS_SUCCESS;
 }
-
+    
 
 VOID DriverExit(PDRIVER_OBJECT DriverObject)
 {
-	UNREFERENCED_PARAMETER(DriverObject);
-	DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "BYE\n");
+    UNICODE_STRING SymbolicLink = RTL_CONSTANT_STRING(L"\\??\\GetBaseDriverLink");
+
+    // Delete symbolic link first
+    IoDeleteSymbolicLink(&SymbolicLink);
+
+    // Then delete the device object
+    if (DriverObject->DeviceObject)
+        IoDeleteDevice(DriverObject->DeviceObject);
+
+    DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "BYE\n");
 }
+
 
 uintptr_t GetRuntimeFuncAddress(const wchar_t* functionName)
 {
@@ -71,16 +108,11 @@ uintptr_t GetModuleBase(PEPROCESS eprocess, const wchar_t* moduleName)
         {
             if (RtlEqualUnicodeString(&entry->BaseDllName, &target, TRUE))
             {
-                DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL,
-                    "FOUND %wZ @ %p (size %lu)\n",
-                    &entry->BaseDllName, entry->DllBase, entry->SizeOfImage);
-
                 base = (uintptr_t)entry->DllBase;
                 break;
             }
         }
     }
-
 
     KeUnstackDetachProcess(&apc);
     return base;

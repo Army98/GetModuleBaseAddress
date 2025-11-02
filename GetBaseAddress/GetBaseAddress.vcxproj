@@ -107,9 +107,11 @@
     <FilesToPackage Include="$(TargetPath)" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="communication.c" />
     <ClCompile Include="driver.c" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="communication.h" />
     <ClInclude Include="driver.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

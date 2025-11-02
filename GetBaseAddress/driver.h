@@ -13,6 +13,7 @@ VOID DriverExit(PDRIVER_OBJECT DriverObject);
 uintptr_t GetRuntimeFuncAddress(const wchar_t* functionName);
 uintptr_t GetModuleBase(PEPROCESS eprocess, const wchar_t* moduleName);
 
+
 typedef struct _PEB_LDR_DATA {
     ULONG Length;
     BOOLEAN Initialized;
